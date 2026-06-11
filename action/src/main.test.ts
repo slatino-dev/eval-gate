@@ -42,7 +42,7 @@ const createCommentFn = vi.fn().mockResolvedValue({ data: { id: 9001 } });
 const updateCommentFn = vi.fn().mockResolvedValue({ data: {} });
 const listCommentsFn = vi.fn().mockResolvedValue({ data: [] });
 
-const mockGetOctokit = vi.fn(() => ({
+const mockGetOctokit = vi.fn((_token?: string) => ({
   rest: {
     issues: {
       createComment: createCommentFn,
