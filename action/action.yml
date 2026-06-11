@@ -1,0 +1,40 @@
+name: "evalgate"
+description: "Regression-eval CI gate for LLM/agent pipelines"
+author: "Sam Latino"
+
+inputs:
+  dataset:
+    description: "Path to the YAML eval dataset"
+    required: true
+  base_url:
+    description: "OpenAI-compatible API base URL"
+    required: false
+    default: "http://localhost:8765"
+  model:
+    description: "Model name to request"
+    required: false
+    default: "default"
+  baseline:
+    description: "Path to a JSON baseline from a previous run"
+    required: false
+    default: ""
+  threshold:
+    description: "Maximum allowed pass-rate drop before gate fails (0.0–1.0)"
+    required: false
+    default: "0.05"
+  out:
+    description: "Output JSON report path"
+    required: false
+    default: "evalgate-report.json"
+
+outputs:
+  report:
+    description: "Path to the JSON report written by evalgate"
+
+runs:
+  using: "node20"
+  main: "dist/main.js"
+
+branding:
+  icon: "shield"
+  color: "blue"

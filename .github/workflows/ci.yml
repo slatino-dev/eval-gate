@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev/**"]
+  pull_request:
+
+jobs:
+  # ── Python: lint + type-check + test (3.11, 3.12, 3.13) ─────────────────────
+  python:
+    name: "Python ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install evalgate + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Mypy type-check
+        run: mypy evalgate/
+
+      - name: pytest
+        run: pytest -v tests/
+
+  # ── Node: build dist + vitest ─────────────────────────────────────────────────
+  node:
+    name: "Node (action build + test)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: action/package-lock.json
+
+      - name: Install action dependencies
+        working-directory: action
+        run: npm ci
+
+      - name: TypeScript type-check
+        working-directory: action
+        run: npm run typecheck
+
+      - name: Build dist
+        working-directory: action
+        run: npm run build
+
+      - name: vitest
+        working-directory: action
+        run: npm test
+
+  # ── Scrub check: block internal infra leaks ───────────────────────────────────
+  scrub_check:
+    name: "Scrub check"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run scrub_check
+        run: python scripts/scrub_check.py

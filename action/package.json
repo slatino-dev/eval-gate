@@ -1,0 +1,22 @@
+{
+  "name": "evalgate-action",
+  "version": "0.1.0",
+  "description": "GitHub Action wrapper for the evalgate CI gate",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --outfile=dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

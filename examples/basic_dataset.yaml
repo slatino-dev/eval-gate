@@ -1,0 +1,16 @@
+# Example eval dataset — used by CI against the mock server.
+name: basic-smoke
+version: "0.1.0"
+cases:
+  - id: echo-hello
+    prompt: "Say hello."
+    expected: "hello"
+    tags: [smoke]
+  - id: capital-france
+    prompt: "What is the capital of France?"
+    expected: "Paris"
+    tags: [smoke, geography]
+  - id: math-2plus2
+    prompt: "What is 2 + 2?"
+    expected: "4"
+    tags: [smoke, math]
