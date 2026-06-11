@@ -2,12 +2,16 @@
  * evalgate GitHub Action entry-point.
  *
  * Inputs (action.yml):
- *   dataset       — path to YAML eval dataset
+ *   dataset       — path to YAML or JSONL eval dataset
  *   base_url      — OpenAI-compatible endpoint (default: mock server)
  *   model         — model name
+ *   command       — subprocess adapter command (optional; use {input} placeholder)
+ *   k             — number of repeated runs (default 1; use >= 3 for statistical gate)
+ *   scorer        — comma-separated list of scorers (default: contains)
  *   baseline      — path to JSON baseline (optional)
- *   threshold     — regression threshold (default: 0.05)
+ *   threshold     — regression threshold for k=1 gate (default: 0.05)
  *   out           — output JSON report path
+ *   github_token  — token for sticky PR comment (optional)
  *
  * Security note: all user-supplied inputs are passed as discrete array elements
  * to execFileSync so no shell is involved and shell-metacharacter injection is
@@ -127,7 +131,7 @@ function buildMarkdown(report: EvalReport, failed: boolean): string {
   }
 
   lines.push("");
-  lines.push(`_Updated by [evalgate](https://github.com/marketplace) at ${new Date().toUTCString()}_`);
+  lines.push(`_Updated by [evalgate](https://github.com/sam-latino/eval-gate) at ${new Date().toUTCString()}_`);
   return lines.join("\n");
 }
 
@@ -196,6 +200,9 @@ export async function run(): Promise<void> {
     const dataset = core.getInput("dataset", { required: true });
     const baseUrl = core.getInput("base_url") || "http://localhost:8765";
     const model = core.getInput("model") || "default";
+    const command = core.getInput("command");
+    const k = core.getInput("k") || "1";
+    const scorer = core.getInput("scorer") || "contains";
     const baseline = core.getInput("baseline");
     const threshold = core.getInput("threshold") || "0.05";
     const out = core.getInput("out") || "evalgate-report.json";
@@ -210,9 +217,14 @@ export async function run(): Promise<void> {
       dataset,
       `--base-url=${baseUrl}`,
       `--model=${model}`,
+      `--scorer=${scorer}`,
+      `--k=${k}`,
       `--threshold=${threshold}`,
       `--out=${out}`,
     ];
+    if (command) {
+      args.push(`--command=${command}`);
+    }
     if (baseline) {
       args.push(`--baseline=${baseline}`);
     }

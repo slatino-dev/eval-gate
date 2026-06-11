@@ -4,7 +4,7 @@ author: "Sam Latino"
 
 inputs:
   dataset:
-    description: "Path to the YAML eval dataset"
+    description: "Path to the YAML or JSONL eval dataset"
     required: true
   base_url:
     description: "OpenAI-compatible API base URL"
@@ -14,12 +14,35 @@ inputs:
     description: "Model name to request"
     required: false
     default: "default"
+  command:
+    description: >
+      Spawn a subprocess instead of calling an API.
+      Use {input} as placeholder for the case input.
+      Example: 'my-tool --query {input}'
+    required: false
+    default: ""
+  k:
+    description: >
+      Number of repeated runs. k >= 3 activates the statistical noise-floor
+      gate (compare_to_baseline); k=1 uses the legacy point-estimate gate.
+      Requires baseline to be set when k >= 3.
+    required: false
+    default: "1"
+  scorer:
+    description: >
+      Comma-separated list of scorers to use.
+      Available: contains, exact, regex, json_subset, numeric_tolerance,
+      text_similarity, judge.
+    required: false
+    default: "contains"
   baseline:
-    description: "Path to a JSON baseline from a previous run"
+    description: >
+      Path to a JSON baseline. For k >= 3 this must be a Baseline JSON produced
+      by 'evalgate baseline'; for k=1 it must be a RunSummary JSON.
     required: false
     default: ""
   threshold:
-    description: "Maximum allowed pass-rate drop before gate fails (0.0–1.0)"
+    description: "Maximum allowed pass-rate drop before gate fails (0.0–1.0). Only used when k=1."
     required: false
     default: "0.05"
   out:
@@ -36,8 +59,30 @@ outputs:
     description: "Path to the JSON report written by evalgate"
 
 runs:
-  using: "node20"
-  main: "dist/main.js"
+  using: "composite"
+  steps:
+    - name: Install evalgate
+      shell: bash
+      run: pip install evalgate
+
+    - name: Run evalgate
+      shell: bash
+      env:
+        EVALGATE_DATASET: ${{ inputs.dataset }}
+        EVALGATE_BASE_URL: ${{ inputs.base_url }}
+        EVALGATE_MODEL: ${{ inputs.model }}
+        EVALGATE_COMMAND: ${{ inputs.command }}
+        EVALGATE_K: ${{ inputs.k }}
+        EVALGATE_SCORER: ${{ inputs.scorer }}
+        EVALGATE_BASELINE: ${{ inputs.baseline }}
+        EVALGATE_THRESHOLD: ${{ inputs.threshold }}
+        EVALGATE_OUT: ${{ inputs.out }}
+        EVALGATE_GITHUB_TOKEN: ${{ inputs.github_token }}
+        EVALGATE_GITHUB_REF: ${{ github.ref }}
+        EVALGATE_REPO: ${{ github.repository }}
+        EVALGATE_RUN_ID: ${{ github.run_id }}
+      run: |
+        node "${{ github.action_path }}/dist/main.js"
 
 branding:
   icon: "shield"

@@ -5,7 +5,7 @@ __pycache__/
 *.pyd
 *.egg-info/
 .eggs/
-dist/
+/dist/
 build/
 .venv/
 venv/
@@ -18,7 +18,7 @@ MANIFEST
 # Node / TypeScript
 node_modules/
 action/node_modules/
-action/dist/
+# action/dist/ is intentionally committed — required for node20 GitHub Actions
 
 # Eval results
 results/tmp/
