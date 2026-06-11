@@ -26,6 +26,10 @@ inputs:
     description: "Output JSON report path"
     required: false
     default: "evalgate-report.json"
+  github_token:
+    description: "GitHub token for posting/updating a sticky PR comment. Set to secrets.GITHUB_TOKEN."
+    required: false
+    default: ""
 
 outputs:
   report:
