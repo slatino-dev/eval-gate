@@ -1,0 +1,5 @@
+{"id": "capital-france", "input": "What is the capital of France? Answer in one sentence.", "expected": "Paris", "meta": {"scorer": "text_similarity"}}
+{"id": "extract-user-json", "input": "Return this user as JSON: Ada Lovelace, age 36, admin.", "expected": {"name": "Ada Lovelace", "age": 36, "roles": ["admin"]}, "meta": {"scorer": "json_subset"}}
+{"id": "pi-two-decimals", "input": "Give pi rounded to two decimal places. Reply with just the number.", "expected": 3.14, "meta": {"scorer": "numeric_tolerance", "abs_tol": 0.005}}
+{"id": "iso-date-format", "input": "Reply with today's date in ISO 8601 format (YYYY-MM-DD), nothing else.", "expected": "^\\d{4}-\\d{2}-\\d{2}$", "meta": {"scorer": "regex"}}
+{"id": "summarize-politely", "input": "Summarize: the deploy failed because the migration was not applied.", "expected": "The deploy failed because a database migration had not been applied.", "meta": {"scorer": "judge"}, "tags": ["needs-endpoint"]}

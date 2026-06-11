@@ -42,9 +42,9 @@ def test_dataset_filter_by_tag() -> None:
     ds = EvalDataset(
         name="test",
         cases=[
-            EvalCase(id="a", prompt="p1", tags=["math"]),
-            EvalCase(id="b", prompt="p2", tags=["coding"]),
-            EvalCase(id="c", prompt="p3", tags=["math", "coding"]),
+            EvalCase(id="a", input="p1", tags=["math"]),
+            EvalCase(id="b", input="p2", tags=["coding"]),
+            EvalCase(id="c", input="p3", tags=["math", "coding"]),
         ],
     )
     filtered = ds.filter_by_tag("math")

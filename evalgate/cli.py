@@ -40,9 +40,10 @@ def run(
 
     passed = 0
     for case in ds.cases:
+        content = case.input if isinstance(case.input, str) else json.dumps(case.input)
         req = CompletionRequest(
             model=model,
-            messages=[ChatMessage(role="user", content=case.prompt)],
+            messages=[ChatMessage(role="user", content=content)],
         )
         try:
             resp = adapter.complete(req)
