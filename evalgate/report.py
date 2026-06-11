@@ -38,7 +38,7 @@ def _scorer_table(drift_result: DriftResult) -> str:
         "|--------|-------|-------|----|---------|",
     ]
     for d in drift_result.scorers:
-        delta_str = f"{_sign(d.delta)}{d.delta:+.3f}"
+        delta_str = f"{d.delta:+.3f}"
         ci_str = f"[{d.ci_low:.3f}, {d.ci_high:.3f}]"
         if d.regressed:
             verdict = "REGRESSED"
@@ -72,7 +72,7 @@ def _scorer_table_text(drift_result: DriftResult) -> str:
     """Plain-text equivalent of the per-scorer table."""
     lines: list[str] = []
     for d in drift_result.scorers:
-        delta_str = f"{_sign(d.delta)}{d.delta:+.3f}"
+        delta_str = f"{d.delta:+.3f}"
         ci_str = f"[{d.ci_low:.3f}, {d.ci_high:.3f}]"
         if d.regressed:
             verdict = "REGRESSED"

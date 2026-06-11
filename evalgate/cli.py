@@ -94,6 +94,14 @@ def _run_once(
     return raw
 
 
+def _load_dataset(path: Path) -> EvalDataset:
+    """Load a dataset from a YAML or JSONL file, dispatching on extension."""
+    suffix = path.suffix.lower()
+    if suffix in {".jsonl", ".json"}:
+        return EvalDataset.from_jsonl(path)
+    return EvalDataset.from_yaml(path)
+
+
 def _build_adapter_fn(
     base_url: str,
     model: str,
@@ -124,31 +132,42 @@ def _single_run_summary(
     get_actual: Callable[[str], str],
     model: str,
 ) -> RunSummary:
-    """Run once, compute aggregate pass/fail, and return a RunSummary."""
-    raw = _run_once(ds, scorers_list, scorer_objs, get_actual)
-    # Pass/fail: a case passes when *any* non-skipped scorer gives score >= 0.5.
-    # We combine across scorers: all scored cases for the first scorer that has
-    # data, falling back to the union.
-    #
-    # For a single-scorer run this simplifies to counting score >= 0.5.
-    # For multi-scorer runs each case needs at least one scorer pass.
-    passed = 0
+    """Run once, compute aggregate pass/fail, and return a RunSummary.
+
+    Pass/fail and scores come from the same generation: each case is called
+    once, the response is scored by every scorer, and the per-case pass verdict
+    is derived directly from those same scores.  A case passes when *any*
+    non-skipped scorer gives score >= 0.5.
+    """
     total = len(ds.cases)
+    passed = 0
+    per_scorer_scores: dict[str, list[float]] = {name: [] for name in scorers_list}
+
     for case in ds.cases:
         prompt = _case_to_prompt(case)
         try:
             actual: str = get_actual(prompt)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            typer.echo(f"[WARN] case {case.id}: adapter error — {exc}", err=True)
+            # Adapter failed — count 0.0 for all scorers and mark as failed.
+            for name in scorers_list:
+                per_scorer_scores[name].append(0.0)
             continue
-        for scorer_obj in scorer_objs:
+
+        case_passed = False
+        for name, scorer_obj in zip(scorers_list, scorer_objs):
             result = scorer_obj.score(actual, case.expected)
-            if not result.skipped and result.score >= 0.5:
-                passed += 1
-                break
+            if result.skipped:
+                continue
+            per_scorer_scores[name].append(result.score)
+            if result.score >= 0.5:
+                case_passed = True
+        if case_passed:
+            passed += 1
 
     pass_rate = passed / total if total > 0 else 0.0
     scores: dict[str, float] = {}
-    for name, values in raw.items():
+    for name, values in per_scorer_scores.items():
         if values:
             scores[name] = sum(values) / len(values)
 
@@ -171,7 +190,7 @@ def _single_run_summary(
 
 @app.command()
 def run(
-    dataset: Annotated[Path, typer.Argument(help="Path to YAML eval dataset")],
+    dataset: Annotated[Path, typer.Argument(help="Path to YAML or JSONL eval dataset")],
     base_url: Annotated[
         str, typer.Option(help="OpenAI-compatible API base URL")
     ] = "http://localhost:8000",
@@ -225,7 +244,7 @@ def run(
     ] = False,
 ) -> None:
     """Run an eval suite and optionally compare against a baseline."""
-    ds = EvalDataset.from_yaml(dataset)
+    ds = _load_dataset(dataset)
 
     # Parse comma-separated scorer list.
     scorer_names = [s.strip() for s in scorer.split(",") if s.strip()]
@@ -248,13 +267,28 @@ def run(
             typer.echo(f"[run {repeat_idx + 1}/{k}] …", err=True)
             raw = _run_once(ds, scorer_names, scorer_objs, get_actual)
             for name in scorer_names:
-                repeat_raw[name].append(raw[name] if raw[name] else [0.0])
+                if not raw[name]:
+                    typer.echo(
+                        f"[WARN] scorer '{name}' repeat {repeat_idx + 1}: "
+                        "all cases skipped — this repeat is excluded from the mean",
+                        err=True,
+                    )
+                else:
+                    repeat_raw[name].append(raw[name])
 
-        # Candidate means for compare_to_baseline.
+        # Candidate means for compare_to_baseline: average the per-repeat means
+        # (consistent with how summarize_run defines the baseline mean).
         candidate_means: dict[str, float] = {}
         for name, repeats in repeat_raw.items():
-            all_scores = [s for rep in repeats for s in rep]
-            candidate_means[name] = sum(all_scores) / len(all_scores) if all_scores else 0.0
+            if not repeats:
+                typer.echo(
+                    f"[WARN] scorer '{name}': all repeats were skipped — "
+                    "excluding from comparison",
+                    err=True,
+                )
+                continue
+            repeat_means = [sum(rep) / len(rep) for rep in repeats]
+            candidate_means[name] = sum(repeat_means) / len(repeat_means)
 
         # Also emit a RunSummary for the report (using last repeat's counts).
         total = len(ds.cases)
@@ -334,7 +368,7 @@ def run(
 
 @app.command()
 def baseline(
-    dataset: Annotated[Path, typer.Argument(help="Path to YAML eval dataset")],
+    dataset: Annotated[Path, typer.Argument(help="Path to YAML or JSONL eval dataset")],
     base_url: Annotated[
         str, typer.Option(help="OpenAI-compatible API base URL")
     ] = "http://localhost:8000",
@@ -367,7 +401,7 @@ def baseline(
         typer.echo("ERROR: --k must be >= 3 for a meaningful baseline", err=True)
         raise typer.Exit(code=2)
 
-    ds = EvalDataset.from_yaml(dataset)
+    ds = _load_dataset(dataset)
 
     scorer_names = [s.strip() for s in scorer.split(",") if s.strip()]
     try:
@@ -383,7 +417,25 @@ def baseline(
         typer.echo(f"[baseline run {repeat_idx + 1}/{k}] …", err=True)
         raw = _run_once(ds, scorer_names, scorer_objs, get_actual)
         for name in scorer_names:
-            repeat_raw[name].append(raw[name] if raw[name] else [0.0])
+            if not raw[name]:
+                typer.echo(
+                    f"[WARN] scorer '{name}' repeat {repeat_idx + 1}: "
+                    "all cases skipped — this repeat is excluded from the baseline",
+                    err=True,
+                )
+            else:
+                repeat_raw[name].append(raw[name])
+
+    # Error if any scorer has too few valid repeats to build a t-interval.
+    for name, repeats in repeat_raw.items():
+        if len(repeats) < 3:
+            typer.echo(
+                f"ERROR: scorer '{name}' has only {len(repeats)} non-skipped "
+                "repeat(s) — need >= 3 for a meaningful baseline. "
+                "Check that the scorer endpoint is reachable.",
+                err=True,
+            )
+            raise typer.Exit(code=2)
 
     meta: dict[str, str] = {"dataset": ds.name}
     if meta_model:

@@ -333,3 +333,36 @@ def test_run_unknown_scorer_exits_2(mock_server: object) -> None:
         "--scorer=nonexistent",
         expect_code=2,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JSONL dataset dispatch
+# ──────────────────────────────────────────────────────────────────────────────
+
+_CMD_JSONL = str(_REPO_ROOT / "examples" / "command_dataset.jsonl")
+
+
+def test_run_jsonl_dataset_dispatch() -> None:
+    """evalgate run accepts a .jsonl dataset and produces correct results."""
+    result = _run_cli(
+        "run",
+        _CMD_JSONL,
+        f"--command={_cmd_str(_ECHO_TARGET)}",
+        "--scorer=exact",
+    )
+    # All 4 cases known to echo_target should pass.
+    assert "4/4" in result.stdout
+
+
+def test_baseline_jsonl_dataset_dispatch(tmp_path: Path) -> None:
+    """evalgate baseline also accepts a .jsonl dataset."""
+    bl_path = tmp_path / "baseline_jsonl.json"
+    _run_cli(
+        "baseline",
+        _CMD_JSONL,
+        f"--command={_cmd_str(_ECHO_TARGET)}",
+        "--scorer=exact",
+        "--k=3",
+        f"--out={bl_path}",
+    )
+    assert bl_path.is_file()
