@@ -1,0 +1,28 @@
+# Self-dogfood example: evaluate a local command with evalgate.
+#
+# Run against the in-repo echo_target.py:
+#
+#   evalgate run examples/command_dataset.yaml \
+#       --command="python examples/echo_target.py {input}" \
+#       --scorer=exact
+#
+# All four cases should pass (echo_target knows the right answers).
+name: command-echo-demo
+version: "0.1.0"
+cases:
+  - id: two-plus-two
+    input: "What is 2 + 2?"
+    expected: "4"
+    tags: [math, command]
+  - id: capital-france
+    input: "What is the capital of France?"
+    expected: "Paris"
+    tags: [geography, command]
+  - id: say-hello
+    input: "Say hello."
+    expected: "hello"
+    tags: [smoke, command]
+  - id: sky-blue
+    input: "Is the sky blue?"
+    expected: "yes"
+    tags: [trivial, command]
