@@ -1,80 +1,49 @@
 #!/usr/bin/env python3
-"""
-scrub_check.py — fail if the working tree leaks internal infra references.
+"""scrub_check.py - fail (exit 1) if any tracked text file contains a likely
+secret (private keys, cloud / API tokens) or a carrier-grade-NAT address.
 
-Exits 1 and prints matching file/line if any of these patterns are found:
-  - 'redacted-host'
-  - 100.64.x CGNAT address (e.g. redacted-ip)
-  - 'redacted-domain'
-  - 'redacted-mesh'
-  - 'redacted-key'
-  - generic API key: sk-[A-Za-z0-9]{20,}
+A lightweight pre-commit / CI guard. Generic by design: it ships no project- or
+host-specific values. Usage: python scripts/scrub_check.py [--path DIR]
 """
-
 from __future__ import annotations
-
-import re
-import sys
+import re, subprocess, sys
 from pathlib import Path
 
-PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("redacted-host hostname", re.compile(r"redacted-host", re.IGNORECASE)),
-    ("CGNAT 100.64.x address", re.compile(r"\b100\.64\.\d{1,3}\.\d{1,3}\b")),
-    ("redacted-domain domain", re.compile(r"redacted-domain", re.IGNORECASE)),
-    ("redacted-mesh reference", re.compile(r"redacted-mesh", re.IGNORECASE)),
-    ("redacted-key key", re.compile(r"redacted-key", re.IGNORECASE)),
-    ("generic API key sk-*", re.compile(r"sk-[A-Za-z0-9]{20,}")),
+PATTERNS = [
+    ("private-key-block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----")),
+    ("aws-access-key-id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("github-token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36}\b")),
+    ("openai-style-key", re.compile(r"\bsk-(?:ant-|proj-|or-v1-|live-)?[A-Za-z0-9]{32,}\b")),
+    ("slack-token", re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{12,}\b")),
+    ("cgnat-address", re.compile(r"\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b")),
 ]
+SKIP_SUFFIX = {".png",".jpg",".jpeg",".gif",".ico",".svg",".pdf",".whl",".pyc",".so",".dll",".exe",".lock",".bin",".gz",".zip",".tar",".woff",".woff2",".ttf",".otf"}
+SKIP_PARTS = {".git","node_modules","target","dist","build","__pycache__",".venv",".mypy_cache",".ruff_cache",".astro","vendor"}
 
-# Directories / file patterns to skip entirely.
-SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "dist", ".mypy_cache"}
-SKIP_FILES = {"scrub_check.py"}  # don't scan ourselves for the patterns
-
-TEXT_EXTENSIONS = {
-    ".py", ".ts", ".js", ".mjs", ".cjs",
-    ".yaml", ".yml", ".toml", ".json", ".md",
-    ".txt", ".sh", ".env", ".cfg", ".ini",
-}
-
-
-def iter_files(root: Path):
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if path.name in SKIP_FILES:
-            continue
-        if path.suffix.lower() not in TEXT_EXTENSIONS and path.suffix != "":
-            continue
-        yield path
-
+def tracked(root: Path):
+    try:
+        out = subprocess.run(["git","-C",str(root),"ls-files"],capture_output=True,text=True,check=True).stdout
+        return [root / ln for ln in out.splitlines() if ln]
+    except Exception:
+        return [p for p in root.rglob("*") if p.is_file()]
 
 def main() -> int:
-    root = Path(__file__).parent.parent
-    findings: list[str] = []
-
-    for filepath in sorted(iter_files(root)):
-        try:
-            text = filepath.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            for label, pattern in PATTERNS:
-                if pattern.search(line):
-                    rel = filepath.relative_to(root)
-                    findings.append(f"  [{label}] {rel}:{lineno}: {line.strip()}")
-
-    if findings:
-        print("scrub_check FAILED — internal infra references detected:\n")
-        for f in findings:
-            print(f)
-        print(f"\n{len(findings)} finding(s). Remove before committing.")
-        return 1
-
-    print("scrub_check passed — no internal infra references found.")
-    return 0
-
+    args = sys.argv[1:]
+    root = Path(args[args.index("--path")+1]).resolve() if "--path" in args else Path(".").resolve()
+    self_path = Path(__file__).resolve()
+    found = 0
+    for f in tracked(root):
+        if f.resolve() == self_path or f.suffix.lower() in SKIP_SUFFIX: continue
+        if any(part in SKIP_PARTS for part in f.parts) or "min." in f.name: continue
+        try: text = f.read_text(encoding="utf-8", errors="ignore")
+        except Exception: continue
+        for label, rx in PATTERNS:
+            for i, line in enumerate(text.splitlines(), 1):
+                if rx.search(line):
+                    print(f"SCRUB FAIL [{label}] {f}:{i}"); found += 1
+    if found:
+        print(f"scrub_check: FAILED - {found} match(es)."); return 1
+    print("scrub_check: OK - no secrets detected."); return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
